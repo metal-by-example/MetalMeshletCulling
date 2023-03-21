@@ -53,11 +53,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-t 64"
+            argument = "-t 256"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "-v 127"
+            argument = "-v 128"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument

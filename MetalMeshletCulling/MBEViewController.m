@@ -45,15 +45,10 @@
     }
 
     id<MTLCommandBuffer> commandBuffer = [self.commandQueue commandBuffer];
-
     id<MTLRenderCommandEncoder> renderCommandEncoder = [commandBuffer renderCommandEncoderWithDescriptor:renderPass];
-
     [self.renderer draw:renderCommandEncoder];
-
     [renderCommandEncoder endEncoding];
-
     [commandBuffer presentDrawable:view.currentDrawable];
-
     [commandBuffer commit];
 }
 

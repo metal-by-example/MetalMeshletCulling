@@ -23,6 +23,9 @@ struct Meshlet {
     uint32_t triangleCount;
     float boundsCenter[3];
     float boundsRadius;
+    float coneApex[3];
+    float coneAxis[3];
+    float coneCutoff, pad;
 };
 
 static void printUsage(void) {
@@ -39,7 +42,7 @@ static bool buildMeshlets(std::vector<Vertex> const& vertices, std::vector<uint3
                           std::vector<uint32_t> /* out */ &meshletVertices,
                           std::vector<uint8_t> /* out */ &meshletTriangles)
 {
-    const float coneWeight = 0.0f;
+    const float coneWeight = 0.2f;
     size_t maxMeshletCount = meshopt_buildMeshletsBound(indices.size(), maxMeshletVertexCount, maxMeshletTriangleCount);
     std::vector<meshopt_Meshlet> meshletsInternal(maxMeshletCount);
     meshletVertices = std::vector<uint32_t>(maxMeshletCount * maxMeshletVertexCount);
@@ -61,9 +64,16 @@ static bool buildMeshlets(std::vector<Vertex> const& vertices, std::vector<uint3
         meshlets.push_back(Meshlet {
             meshlet.vertex_offset, meshlet.vertex_count,
             meshlet.triangle_offset, meshlet.triangle_count,
-            { bounds.center[0], bounds.center[1], bounds.center[2] }, bounds.radius
+            { bounds.center[0], bounds.center[1], bounds.center[2] }, bounds.radius,
+            { bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2] },
+            { bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2] },
+            bounds.cone_cutoff,
+            0.0f // pad
         });
     }
+
+    // Trim zeros from overestimated meshlet count
+    meshletTriangles.resize(meshlets.back().triangleOffset + meshlets.back().triangleCount * 3);
 
     return (meshletCount > 0);
 }
@@ -131,21 +141,17 @@ static bool buildMeshletsFromAsset(NSURL *inputURL, NSURL *outputURL, size_t max
         buildMeshlets(sourceVertices, sourceIndices, maxMeshletVertexCount, maxMeshletTriangleCount,
                       meshlets, meshletVertices, meshletTriangles);
 
-        std::vector<Vertex> submeshVertices { sourceMesh.vertexCount };
-        for (int i = 0; i < sourceMesh.vertexCount; ++i) {
-            submeshVertices[i] = sourceVertices[meshletVertices[i]];
-        } //  TODO: Truncate to actually used size
-
         MBEMeshFileHeader dummyHeader { 0 };
         MBEMeshFileSubmesh submesh = {
             .meshletsStartIndex = 0,
             .meshletsCount = (uint32_t)meshlets.size(),
         };
 
-        size_t submeshOffset, meshletsOffset, vertexDataOffset, meshletTrianglesOffset;
+        size_t submeshOffset, meshletsOffset, vertexDataOffset, meshletVerticesOffset, meshletTrianglesOffset;
         size_t submeshCount = 1;
         size_t meshletCount = meshlets.size();
-        size_t vertexDataLength = submeshVertices.size() * sizeof(Vertex);
+        size_t vertexDataLength = sourceVertices.size() * sizeof(Vertex);
+        size_t meshletVerticesLength = meshletVertices.size() * sizeof(uint32_t);
         size_t meshletTrianglesLength = meshletTriangles.size() * sizeof(uint8_t);
         NSMutableData *meshletData = [NSMutableData new];
         [meshletData appendBytes:&dummyHeader length:sizeof(dummyHeader)]; // reserve space for header
@@ -163,22 +169,40 @@ static bool buildMeshletsFromAsset(NSURL *inputURL, NSURL *outputURL, size_t max
                     meshlets[i].boundsCenter[1],
                     meshlets[i].boundsCenter[2],
                     meshlets[i].boundsRadius
-                }
+                },
+                .coneApex = {
+                    meshlets[i].coneApex[0],
+                    meshlets[i].coneApex[1],
+                    meshlets[i].coneApex[2],
+                },
+                .coneAxis = {
+                    meshlets[i].coneAxis[0],
+                    meshlets[i].coneAxis[1],
+                    meshlets[i].coneAxis[2],
+                },
+                .coneCutoff = meshlets[i].coneCutoff,
+                .pad = 0.0f,
             };
             [meshletData appendBytes:&meshletRecord length:sizeof(MBEMeshFileMeshlet)];
         }
         vertexDataOffset = meshletData.length;
-        [meshletData appendBytes:submeshVertices.data() length:vertexDataLength];
+        [meshletData appendBytes:sourceVertices.data() length:vertexDataLength];
+        meshletVerticesOffset = meshletData.length;
+        [meshletData appendBytes:meshletVertices.data() length:meshletVerticesLength];
         meshletTrianglesOffset = meshletData.length;
         [meshletData appendBytes:meshletTriangles.data() length:meshletTrianglesLength];
 
         MBEMeshFileHeader header = {
+            .meshletMaxVertexCount = (uint32_t)maxMeshletVertexCount,
+            .meshletMaxTriangleCount = (uint32_t)maxMeshletTriangleCount,
             .submeshOffset = (uint32_t)submeshOffset,
             .submeshCount = (uint32_t)submeshCount,
             .meshletsOffset = (uint32_t)meshletsOffset,
             .meshletCount = (uint32_t)meshletCount,
             .vertexDataOffset = (uint32_t)vertexDataOffset,
             .vertexDataLength = (uint32_t)vertexDataLength,
+            .meshletVertexOffset = (uint32_t)meshletVerticesOffset,
+            .meshletVertexLength = (uint32_t)meshletVerticesLength,
             .meshletTrianglesOffset = (uint32_t)meshletTrianglesOffset,
             .meshletTrianglesLength = (uint32_t)meshletTrianglesLength,
         };

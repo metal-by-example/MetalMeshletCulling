@@ -35,9 +35,9 @@ simd_float4x4 simd_float4x4_rotation_axis_angle(float axisX, float axisY, float 
 
 typedef struct InstanceData {
     simd_float4x4 modelViewProjectionMatrix;
+    simd_float4x4 inverseModelViewMatrix;
     simd_float4x4 normalMatrix;
 } InstanceData;
-
 
 @interface MBEMeshletRenderer ()
 @property (nonatomic, strong) id<MTLDepthStencilState> depthStencilState;
@@ -94,8 +94,19 @@ typedef struct InstanceData {
     [renderCommandEncoder setDepthStencilState:self.depthStencilState];
     [renderCommandEncoder setRenderPipelineState:self.meshRenderPipeline];
 
+    [renderCommandEncoder setFrontFacingWinding:MTLWindingCounterClockwise];
+    [renderCommandEncoder setCullMode:MTLCullModeBack];
+
+    // We produce one vertex and/or one triangle per mesh thread, so calculate
+    // the max number of threads we need to launch per mesh threadgroup.
+    const size_t maxMeshThreads = MAX(self.mesh.meshletMaxVertexCount, self.mesh.meshletMaxTriangleCount);
+
     MBEMeshBuffer *vertexBuffer = self.mesh.vertexBuffers.firstObject;
     [renderCommandEncoder setMeshBuffer:vertexBuffer.buffer offset:vertexBuffer.offset atIndex:0];
+
+    [renderCommandEncoder setMeshBuffer:self.mesh.meshletVertexBuffer.buffer
+                                 offset:self.mesh.meshletVertexBuffer.offset
+                                atIndex:2];
 
     float aspect = self.viewport.width / self.viewport.height;
 
@@ -112,12 +123,13 @@ typedef struct InstanceData {
 
     InstanceData instance = {
         .modelViewProjectionMatrix = mvpMatrix,
-        .normalMatrix = normalMatrix
+        .inverseModelViewMatrix = simd_inverse(modelViewMatrix),
+        .normalMatrix = normalMatrix,
     };
 
     [renderCommandEncoder setObjectBytes:&instance length:sizeof(instance) atIndex:1];
 
-    [renderCommandEncoder setMeshBytes:&instance length:sizeof(instance) atIndex:3];
+    [renderCommandEncoder setMeshBytes:&instance length:sizeof(instance) atIndex:4];
 
     for (MBESubmesh *submesh in self.mesh.submeshes) {
         [renderCommandEncoder setObjectBuffer:submesh.meshletBuffer.buffer
@@ -129,13 +141,13 @@ typedef struct InstanceData {
                                     atIndex:1];
         [renderCommandEncoder setMeshBuffer:submesh.meshletTriangleBuffer.buffer
                                      offset:submesh.meshletTriangleBuffer.offset
-                                    atIndex:2];
+                                    atIndex:3];
 
         // TODO: Set fragment resources (material data, etc.)
 
         MTLSize meshThreadCount = MTLSizeMake(submesh.meshletCount, 1, 1);
         MTLSize threadsPerObjectThreadgroup = MTLSizeMake(16, 1, 1);
-        MTLSize threadsPerMeshThreadgroup = MTLSizeMake(128, 1, 1);
+        MTLSize threadsPerMeshThreadgroup = MTLSizeMake(maxMeshThreads, 1, 1);
         [renderCommandEncoder drawMeshThreads:meshThreadCount
                   threadsPerObjectThreadgroup:threadsPerObjectThreadgroup
                     threadsPerMeshThreadgroup:threadsPerMeshThreadgroup];

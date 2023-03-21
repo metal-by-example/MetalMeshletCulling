@@ -6,12 +6,16 @@
 NS_ASSUME_NONNULL_BEGIN
 
 typedef struct MBEMeshFileHeader {
+    uint32_t meshletMaxVertexCount;
+    uint32_t meshletMaxTriangleCount;
     uint32_t submeshOffset; // offset in bytes from the start of the file to submesh entries
     uint32_t submeshCount;
     uint32_t meshletsOffset; // offset in bytes from the start of the file to meshlet entries
     uint32_t meshletCount;
     uint32_t vertexDataOffset; // offset in bytes from the start of the file to the vertex data
     uint32_t vertexDataLength;
+    uint32_t meshletVertexOffset; // offset in bytes from the start of the file to the meshlet-to-mesh index map
+    uint32_t meshletVertexLength;
     uint32_t meshletTrianglesOffset; // offset in bytes from the start of the file to the meshlet triangle data
     uint32_t meshletTrianglesLength;
 } MBEMeshFileHeader;
@@ -27,6 +31,9 @@ typedef struct MBEMeshFileMeshlet {
     uint32_t triangleOffset;
     uint32_t triangleCount;
     float bounds[4]; // bounding circle center (x, y, z) and radius (w)
+    float coneApex[3];
+    float coneAxis[3];
+    float coneCutoff, pad;
 } MBEMeshFileMeshlet;
 
 @interface MBEMeshBuffer : NSObject
@@ -51,6 +58,9 @@ typedef struct MBEMeshFileMeshlet {
 
 @property (nonatomic, copy) MTLVertexDescriptor *vertexDescriptor;
 @property (nonatomic, copy) NSArray<MBEMeshBuffer *> *vertexBuffers;
+@property (nonatomic, copy) MBEMeshBuffer *meshletVertexBuffer;
+@property (nonatomic, assign) NSUInteger meshletMaxVertexCount;
+@property (nonatomic, assign) NSUInteger meshletMaxTriangleCount;
 @property (nonatomic, copy) NSArray<MBESubmesh *> *submeshes;
 
 - (instancetype _Nullable)initWithURL:(NSURL *)url device:(id<MTLDevice>)device;

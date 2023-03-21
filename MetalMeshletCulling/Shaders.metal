@@ -2,8 +2,8 @@
 #include <metal_stdlib>
 using namespace metal;
 
-constexpr constant uint kMaxVerticesPerMeshlet = 128;
-constexpr constant uint kMaxTrianglesPerMeshlet = 256;
+constexpr constant uint kMaxVerticesPerMeshlet = 256;
+constexpr constant uint kMaxTrianglesPerMeshlet = 512;
 constexpr constant uint kMeshletsPerObject = 16;
 
 struct Vertex {
@@ -14,6 +14,7 @@ struct Vertex {
 
 struct InstanceData {
     float4x4 modelViewProjectionMatrix;
+    float4x4 inverseModelViewMatrix;
     float4x4 normalMatrix;
 };
 
@@ -34,6 +35,9 @@ struct MeshletDescriptor {
     uint triangleCount;
     packed_float3 boundsCenter;
     float boundsRadius;
+    packed_float3 coneApex;
+    packed_float3 coneAxis;
+    float coneCutoff, pad;
 };
 
 struct ObjectPayload {
@@ -64,6 +68,10 @@ static bool sphere_intersects_frustum(thread float4 *planes, float3 center, floa
     return true;
 }
 
+static bool cone_is_backfacing(float3 coneApex, float3 coneAxis, float coneCutoff, float3 cameraPosition) {
+    return (dot(normalize(coneApex - cameraPosition), coneAxis) >= coneCutoff);
+}
+
 // https://www.ronja-tutorials.com/post/041-hsv-colorspace/
 static float3 hue2rgb(float hue) {
     hue = fract(hue); //only use fractional part of hue, making it loop
@@ -76,11 +84,11 @@ static float3 hue2rgb(float hue) {
 }
 
 [[object, max_total_threadgroups_per_mesh_grid(kMeshletsPerObject)]]
-void object_main(object_data ObjectPayload &outObject [[payload]],
-                 device const MeshletDescriptor *meshlets [[buffer(0)]],
-                 constant InstanceData &instance [[buffer(1)]],
-                 uint meshletIndex [[thread_position_in_grid]],
-                 uint threadIndex [[thread_position_in_threadgroup]],
+void object_main(device const MeshletDescriptor *meshlets [[buffer(0)]],
+                 constant InstanceData &instance          [[buffer(1)]],
+                 uint meshletIndex          [[thread_position_in_grid]],
+                 uint threadIndex    [[thread_position_in_threadgroup]],
+                 object_data ObjectPayload &outObject       [[payload]],
                  mesh_grid_properties outGrid)
 {
     // Look up the meshlet this thread will determine the visibility of
@@ -90,12 +98,14 @@ void object_main(object_data ObjectPayload &outObject [[payload]],
     float4 frustumPlanes[6];
     extract_frustum_planes(instance.modelViewProjectionMatrix, frustumPlanes);
     bool frustumCulled = !sphere_intersects_frustum(frustumPlanes, meshlet.boundsCenter, meshlet.boundsRadius);
-    bool normalConeCulled = false /* TODO */;
+
+    float3 cameraPosition = (instance.inverseModelViewMatrix * float4(0.0f, 0.0f, 0.0f, 1.0f)).xyz;
+    bool normalConeCulled = cone_is_backfacing(meshlet.coneApex, meshlet.coneAxis, meshlet.coneCutoff, cameraPosition);
+
     int passed = (!frustumCulled && !normalConeCulled) ? 1 : 0;
 
     // Perform a prefix scan to determine the number of meshlets not culled by lower-indexed threads
     // in our SIMDgroup, which tells us which payload index to write our meshlet index into iff it passed.
-    // We could probably use a ballot/vote here instead but I haven't figured that out yet.
     int payloadIndex = simd_prefix_exclusive_sum(passed);
 
     if (passed) {
@@ -115,20 +125,21 @@ void object_main(object_data ObjectPayload &outObject [[payload]],
 using Meshlet = metal::mesh<MeshletVertex, MeshletPrimitive, kMaxVerticesPerMeshlet, kMaxTrianglesPerMeshlet, topology::triangle>;
 
 [[mesh]]
-void mesh_main(Meshlet outMesh,
-               object_data ObjectPayload const& object [[payload]],
-               device const Vertex *meshVertices [[buffer(0)]],
-               constant MeshletDescriptor *meshlets [[buffer(1)]],
-               constant uchar *meshletTriangles [[buffer(2)]],
-               constant InstanceData &instance [[buffer(3)]],
-               uint payloadIndex [[threadgroup_position_in_grid]],
-               uint threadIndex [[thread_position_in_threadgroup]])
+void mesh_main(object_data ObjectPayload const& object   [[payload]],
+               device const Vertex *meshVertices       [[buffer(0)]],
+               constant MeshletDescriptor *meshlets    [[buffer(1)]],
+               constant uint *meshletVertices          [[buffer(2)]],
+               constant uchar *meshletTriangles        [[buffer(3)]],
+               constant InstanceData &instance         [[buffer(4)]],
+               uint payloadIndex    [[threadgroup_position_in_grid]],
+               uint threadIndex   [[thread_position_in_threadgroup]],
+               Meshlet outMesh)
 {
     uint meshletIndex = object.meshletIndices[payloadIndex];
     constant MeshletDescriptor &meshlet = meshlets[meshletIndex];
 
     if (threadIndex < meshlet.vertexCount) {
-        device const Vertex &meshVertex = meshVertices[meshlet.vertexOffset + threadIndex];
+        device const Vertex &meshVertex = meshVertices[meshletVertices[meshlet.vertexOffset + threadIndex]];
         MeshletVertex v;
         v.position = instance.modelViewProjectionMatrix * float4(meshVertex.position, 1.0f);
         v.normal = (instance.normalMatrix * float4(meshVertex.normal, 0.0f)).xyz; // view-space normal
@@ -137,11 +148,14 @@ void mesh_main(Meshlet outMesh,
     }
 
     if (threadIndex < meshlet.triangleCount) {
-        outMesh.set_index(threadIndex * 3 + 0, meshletTriangles[meshlet.triangleOffset + threadIndex * 3 + 0]);
-        outMesh.set_index(threadIndex * 3 + 1, meshletTriangles[meshlet.triangleOffset + threadIndex * 3 + 1]);
-        outMesh.set_index(threadIndex * 3 + 2, meshletTriangles[meshlet.triangleOffset + threadIndex * 3 + 2]);
+        uint i = threadIndex * 3;
+        outMesh.set_index(i + 0, meshletTriangles[meshlet.triangleOffset + i + 0]);
+        outMesh.set_index(i + 1, meshletTriangles[meshlet.triangleOffset + i + 1]);
+        outMesh.set_index(i + 2, meshletTriangles[meshlet.triangleOffset + i + 2]);
 
         MeshletPrimitive prim = {
+            // Map meshlet indices to widely-spaced values around the color wheel
+            // to give each meshlet a pseudo-random color
             .color = float4(hue2rgb(meshletIndex * 1.71f), 1)
         };
         outMesh.set_primitive(threadIndex, prim);
