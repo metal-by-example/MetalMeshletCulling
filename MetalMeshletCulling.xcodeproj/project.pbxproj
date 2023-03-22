@@ -430,8 +430,8 @@
 				ENABLE_HARDENED_RUNTIME = NO;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/third_party/meshoptimizer/include";
 				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/third_party/meshoptimizer/lib/arm64";
-				"LIBRARY_SEARCH_PATHS[arch=*]" = "";
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(SRCROOT)/third_party/meshoptimizer/lib/arm64";
+				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(SRCROOT)/third_party/meshoptimizer/lib/x86_64";
 				MACOSX_DEPLOYMENT_TARGET = 11.0;
 				OTHER_LDFLAGS = "-lmeshoptimizer";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -447,8 +447,8 @@
 				ENABLE_HARDENED_RUNTIME = NO;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/third_party/meshoptimizer/include";
 				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/third_party/meshoptimizer/lib/arm64";
-				"LIBRARY_SEARCH_PATHS[arch=*]" = "";
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(SRCROOT)/third_party/meshoptimizer/lib/arm64";
+				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(SRCROOT)/third_party/meshoptimizer/lib/x86_64";
 				MACOSX_DEPLOYMENT_TARGET = 11.0;
 				OTHER_LDFLAGS = "-lmeshoptimizer";
 				PRODUCT_NAME = "$(TARGET_NAME)";
