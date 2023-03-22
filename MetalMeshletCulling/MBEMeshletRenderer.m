@@ -135,6 +135,8 @@ typedef struct InstanceData {
         [renderCommandEncoder setObjectBuffer:submesh.meshletBuffer.buffer
                                        offset:submesh.meshletBuffer.offset
                                       atIndex:0];
+        uint32_t meshletCount = (uint32_t)submesh.meshletCount;
+        [renderCommandEncoder setObjectBytes:&meshletCount length:sizeof(meshletCount) atIndex:2];
 
         [renderCommandEncoder setMeshBuffer:submesh.meshletBuffer.buffer
                                      offset:submesh.meshletBuffer.offset
@@ -145,12 +147,13 @@ typedef struct InstanceData {
 
         // TODO: Set fragment resources (material data, etc.)
 
-        MTLSize meshThreadCount = MTLSizeMake(submesh.meshletCount, 1, 1);
-        MTLSize threadsPerObjectThreadgroup = MTLSizeMake(16, 1, 1);
-        MTLSize threadsPerMeshThreadgroup = MTLSizeMake(maxMeshThreads, 1, 1);
-        [renderCommandEncoder drawMeshThreads:meshThreadCount
-                  threadsPerObjectThreadgroup:threadsPerObjectThreadgroup
-                    threadsPerMeshThreadgroup:threadsPerMeshThreadgroup];
+        NSInteger threadsPerObjectGrid = submesh.meshletCount;
+        NSInteger threadsPerObjectThreadgroup = 16;
+        NSInteger threadgroupsPerObject = (threadsPerObjectGrid + threadsPerObjectThreadgroup - 1) / threadsPerObjectThreadgroup;
+        NSInteger threadsPerMeshThreadgroup = maxMeshThreads;
+        [renderCommandEncoder drawMeshThreadgroups:MTLSizeMake(threadgroupsPerObject, 1, 1)
+                       threadsPerObjectThreadgroup:MTLSizeMake(threadsPerObjectThreadgroup, 1, 1)
+                         threadsPerMeshThreadgroup:MTLSizeMake(threadsPerMeshThreadgroup, 1, 1)];
     }
 }
 

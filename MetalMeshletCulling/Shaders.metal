@@ -18,6 +18,10 @@ struct InstanceData {
     float4x4 normalMatrix;
 };
 
+struct MeshData {
+    uint meshletCount;
+};
+
 struct MeshletVertex {
     float4 position [[position]];
     float3 normal;
@@ -86,11 +90,16 @@ static float3 hue2rgb(float hue) {
 [[object, max_total_threadgroups_per_mesh_grid(kMeshletsPerObject)]]
 void object_main(device const MeshletDescriptor *meshlets [[buffer(0)]],
                  constant InstanceData &instance          [[buffer(1)]],
+                 constant MeshData &mesh                  [[buffer(2)]],
                  uint meshletIndex          [[thread_position_in_grid]],
                  uint threadIndex    [[thread_position_in_threadgroup]],
                  object_data ObjectPayload &outObject       [[payload]],
                  mesh_grid_properties outGrid)
 {
+    if (meshletIndex >= mesh.meshletCount) {
+        return;
+    }
+    
     // Look up the meshlet this thread will determine the visibility of
     device const MeshletDescriptor &meshlet = meshlets[meshletIndex];
 
