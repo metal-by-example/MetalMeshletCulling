@@ -27,8 +27,14 @@
 
     self.mtkView = mtkView;
     self.mtkView.delegate = self;
+    self.mtkView.sampleCount = 4;
+    self.mtkView.clearColor = MTLClearColorMake(1, 1, 1, 1.0);
+    self.mtkView.colorPixelFormat = MTLPixelFormatBGRA8Unorm_sRGB;
+    self.mtkView.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
 
-    self.renderer = [[MBEMeshletRenderer alloc] initWithDevice:self.device commandQueue:self.commandQueue view:self.mtkView];
+    self.renderer = [[MBEMeshletRenderer alloc] initWithDevice:self.device
+                                                  commandQueue:self.commandQueue
+                                                          view:self.mtkView];
 
     NSURL *assetURL = [[NSBundle mainBundle] URLForResource:@"dragon" withExtension:@"mbemesh"];
     self.renderer.mesh = [[MBEMesh alloc] initWithURL:assetURL device:self.device];

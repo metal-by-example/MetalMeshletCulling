@@ -108,7 +108,7 @@ void object_main(device const MeshletDescriptor *meshlets [[buffer(0)]],
     extract_frustum_planes(instance.modelViewProjectionMatrix, frustumPlanes);
     bool frustumCulled = !sphere_intersects_frustum(frustumPlanes, meshlet.boundsCenter, meshlet.boundsRadius);
 
-    float3 cameraPosition = (instance.inverseModelViewMatrix * float4(0.0f, 0.0f, 0.0f, 1.0f)).xyz;
+    float3 cameraPosition = instance.inverseModelViewMatrix[3].xyz;
     bool normalConeCulled = cone_is_backfacing(meshlet.coneApex, meshlet.coneAxis, meshlet.coneCutoff, cameraPosition);
 
     int passed = (!frustumCulled && !normalConeCulled) ? 1 : 0;
