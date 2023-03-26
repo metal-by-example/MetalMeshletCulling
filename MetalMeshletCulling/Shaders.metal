@@ -49,9 +49,8 @@ struct ObjectPayload {
 };
 
 /// Extracts the six frustum planes determined by the provided matrix.
-/// The matrix can be a perspective projection matrix, or some combination of
-/// projection, view, and model matrices; the planes will be in the space the
-/// matrix transforms from.
+// Ref. https://www8.cs.umu.se/kurser/5DV051/HT12/lab/plane_extraction.pdf
+// Ref. https://fgiesen.wordpress.com/2012/08/31/frustum-planes-from-the-projection-matrix/
 static void extract_frustum_planes(constant float4x4 &matrix, thread float4 *planes) {
     float4x4 mt = transpose(matrix);
     planes[0] = mt[3] + mt[0]; // left
@@ -60,12 +59,14 @@ static void extract_frustum_planes(constant float4x4 &matrix, thread float4 *pla
     planes[3] = mt[3] + mt[1]; // bottom
     planes[4] = mt[2];         // near
     planes[5] = mt[3] - mt[2]; // far
+    for (int i = 0; i < 6; ++i) {
+        planes[i] /= length(planes[i].xyz);
+    }
 }
 
 static bool sphere_intersects_frustum(thread float4 *planes, float3 center, float radius) {
     for(int i = 0; i < 6; ++i) {
-        float D = dot(center, planes[i].xyz) + planes[i].w + radius;
-        if (D < 0) {
+        if (dot(center, planes[i].xyz) + planes[i].w < -radius) {
             return false;
         }
     }
