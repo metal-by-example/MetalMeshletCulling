@@ -4,7 +4,7 @@ using namespace metal;
 
 constexpr constant uint kMaxVerticesPerMeshlet = 256;
 constexpr constant uint kMaxTrianglesPerMeshlet = 512;
-constexpr constant uint kMeshletsPerObject = 16;
+constexpr constant uint kMeshletsPerObject = 32;
 
 struct Vertex {
     packed_float3 position;

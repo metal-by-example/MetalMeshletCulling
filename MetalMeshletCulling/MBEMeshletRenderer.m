@@ -150,7 +150,7 @@ typedef struct InstanceData {
         // TODO: Set fragment resources (material data, etc.)
 
         NSInteger threadsPerObjectGrid = submesh.meshletCount;
-        NSInteger threadsPerObjectThreadgroup = 16;
+        NSInteger threadsPerObjectThreadgroup = 32;
         NSInteger threadgroupsPerObject = (threadsPerObjectGrid + threadsPerObjectThreadgroup - 1) / threadsPerObjectThreadgroup;
         NSInteger threadsPerMeshThreadgroup = maxMeshThreads;
         [renderCommandEncoder drawMeshThreadgroups:MTLSizeMake(threadgroupsPerObject, 1, 1)
